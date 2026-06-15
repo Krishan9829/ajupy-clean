@@ -59,7 +59,7 @@ try {
   );
 
   setTimeout(() => {
-    router.push("/login");
+    router.push("/auth/login");
   }, 2500);
 } catch (err) {
   console.error(err);

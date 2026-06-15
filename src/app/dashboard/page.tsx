@@ -57,7 +57,7 @@ useEffect(() => {
 
   // ✅ Only redirect AFTER loading complete
   if (!user) {
-    router.replace("/login"); // 🔥 change /auth → /login
+    router.replace("/auth/login"); // 🔥 change /auth → /login
   }
 }, [user, loading, router]);
 
