@@ -35,7 +35,7 @@ export default function SignupPage() {
             </p>
 
             <Link
-              href="/login"
+              href="/auth/login"
               className="font-semibold hover:text-zinc-300 transition"
             >
               Login Now
