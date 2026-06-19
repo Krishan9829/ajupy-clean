@@ -8,6 +8,7 @@ type Collection = {
   id: number;
   image: string;
   prompt: string;
+  user_id?: string;
   created_at?: string;
 };
 
@@ -15,8 +16,9 @@ export default function CollectionsPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  // ✅ FIX: create supabase instance
+  // ✅ keep your approach
   const supabase = getSupabase();
 
   useEffect(() => {
@@ -25,27 +27,44 @@ export default function CollectionsPage() {
 
   const fetchCollections = async () => {
     try {
-      // ✅ safety check
       if (!supabase) {
         console.error("❌ Supabase not initialized");
+        setErrorMsg("Server issue. Try again later.");
         setCollections([]);
         setLoading(false);
         return;
       }
 
+      // 🔥 NEW: get current user
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
+
+      if (userError || !userData?.user) {
+        setErrorMsg("User not authenticated");
+        setCollections([]);
+        setLoading(false);
+        return;
+      }
+
+      const userId = userData.user.id;
+
+      // 🔥 FIX: fetch only user's data
       const { data, error } = await supabase
         .from("collections")
         .select("*")
+        .eq("user_id", userId)
         .order("id", { ascending: false });
 
       if (error) {
         console.error(error);
+        setErrorMsg("Failed to load collections");
         setCollections([]);
       } else {
         setCollections((data || []) as Collection[]);
       }
     } catch (err) {
       console.error(err);
+      setErrorMsg("Something went wrong");
       setCollections([]);
     }
 
@@ -57,20 +76,24 @@ export default function CollectionsPage() {
     item.prompt?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ⏳ LOADING UI
+  // ⏳ LOADING UI (UPGRADED)
   if (loading) {
     return (
-      <div className="ml-[240px] p-6">
-        <p className="animate-pulse text-gray-500">
-          Loading your designs...
-        </p>
+      <div className="p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="h-40 bg-gray-200 animate-pulse rounded"
+            ></div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="ml-[240px] p-6">
-
+    <div className="p-6">
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">
@@ -86,9 +109,16 @@ export default function CollectionsPage() {
         />
       </div>
 
+      {/* ERROR UI */}
+      {errorMsg && (
+        <div className="mb-4 text-red-500 text-sm">
+          {errorMsg}
+        </div>
+      )}
+
       {/* STATS */}
       <p className="text-sm text-gray-500 mb-4">
-        Total Designs: {collections.length}
+        Total Designs: {filtered.length}
       </p>
 
       {/* EMPTY STATE */}

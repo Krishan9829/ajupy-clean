@@ -3,33 +3,73 @@ export const dynamic = "force-dynamic";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
+// 🔥 CONFIG
 const USE_DEMO = process.env.USE_DEMO === "true";
 
-const withTimeout = (promise: Promise<any>, ms = 20000) => {
+// 🔥 RATE LIMIT
+const rateMap = new Map<string, number>();
+
+// 🔥 TIMEOUT
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  ms = 20000
+): Promise<T> => {
   return Promise.race([
     promise,
-    new Promise((_, reject) =>
+    new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error("Timeout")), ms)
     ),
   ]);
 };
 
+// ✅ GET (for testing)
+export async function GET() {
+  return NextResponse.json({
+    success: true,
+    message: "API is working. Use POST",
+  });
+}
+
 export async function POST(req: Request) {
   try {
+    // 🔥 IP RATE LIMIT
+    const ip =
+      req.headers.get("x-forwarded-for") ||
+      req.headers.get("x-real-ip") ||
+      "unknown";
+
+    const now = Date.now();
+    const last = rateMap.get(ip) || 0;
+
+    if (now - last < 1000) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests" },
+        { status: 429 }
+      );
+    }
+
+    rateMap.set(ip, now);
+
+    // 🔥 BODY
     const body = await req.json();
     let { prompt, style } = body;
 
-    if (!prompt) {
+    if (!prompt || typeof prompt !== "string") {
       return NextResponse.json(
-        { success: false, error: "Prompt required" },
+        { success: false, error: "Invalid prompt" },
         { status: 400 }
       );
     }
 
-    prompt = prompt.toString().trim().slice(0, 300);
-    style = style || "luxury indian bridal";
+    prompt = prompt.trim().slice(0, 200);
 
-    // 🔥 DEMO MODE FIRST (no OpenAI needed)
+    const allowedStyles = ["bridal", "luxury", "minimal", "royal"];
+    style =
+      typeof style === "string" && allowedStyles.includes(style)
+        ? style
+        : "luxury";
+
+    // 🔥 DEMO MODE
     if (USE_DEMO) {
       return NextResponse.json({
         success: true,
@@ -42,69 +82,41 @@ export async function POST(req: Request) {
       });
     }
 
-    // ✅ CHECK ENV SAFELY
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "Missing OpenAI API key" },
-        { status: 500 }
-      );
+    // 🔥 TEXT AI (OPTIONAL — works only if billing ok)
+    let text = `Design for: ${prompt}`;
+
+    try {
+      if (process.env.OPENAI_API_KEY) {
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY,
+        });
+
+        const textRes = await withTimeout(
+          openai.responses.create({
+            model: "gpt-4o-mini",
+            input: `Create ${style} saree design for: ${prompt}`,
+          })
+        );
+
+        text =
+          (textRes as any)?.output_text ||
+          text;
+      }
+    } catch (e) {
+      console.log("Text AI failed, using fallback");
     }
 
-    // ✅ INIT HERE (SAFE)
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const enhancedPrompt = `
-You are a world-class fashion designer AI.
-
-Create a ${style} saree design.
-
-User idea: ${prompt}
-
-Return:
-1. Fabric
-2. Colors
-3. Embroidery
-4. Border
-5. Pallu
-6. Blouse
-`;
-
-    const [textRes, imageRes] = await Promise.all([
-      withTimeout(
-        openai.responses.create({
-          model: "gpt-4.1-mini",
-          input: enhancedPrompt,
-        })
-      ),
-
-      withTimeout(
-        openai.images.generate({
-          model: "gpt-image-1",
-          prompt: `${prompt}, ${style}, indian saree, luxury fashion, 4k`,
-          size: "1024x1024",
-        })
-      ),
-    ]);
-
-    const text = textRes?.output_text || "No design generated";
-
-    const img = imageRes?.data?.[0];
-
-    let image = "";
-
-    if (img?.url) image = img.url;
-    else if (img?.b64_json)
-      image = `data:image/png;base64,${img.b64_json}`;
-
-    if (!image) {
-      image = "https://via.placeholder.com/512?text=No+Image";
-    }
+    // 🔥 FREE IMAGE (NO API KEY 💀🔥)
+    const image = `https://image.pollinations.ai/prompt/${encodeURIComponent(
+      prompt +
+        ", indian saree, " +
+        style +
+        ", ultra detailed, 4k, fashion design, textile pattern"
+    )}`;
 
     return NextResponse.json({
       success: true,
-      mode: "live",
+      mode: "free",
       result: {
         text,
         image,
@@ -112,12 +124,10 @@ Return:
     });
 
   } catch (err: any) {
-    console.error("API ERROR:", err);
-
     return NextResponse.json(
       {
         success: false,
-        error: err.message,
+        error: err.message || "Server error",
       },
       { status: 500 }
     );

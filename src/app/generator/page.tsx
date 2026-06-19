@@ -1,50 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import PromptBox from "../../components/ai/prompt-box";
-import ResultGrid from "../../components/ai/result-grid";
 import FashionSelector from "../../components/ai/fashion-selector";
 import AdvancedForm from "../../components/ai/advanced-form";
 import {
   buildFashionPrompt,
   FashionType,
 } from "../../lib/fashion-engine";
+import { getSupabase } from "../../lib/supabase";
+
+type AIResult = {
+  image?: string;
+  text?: string;
+};
 
 export default function GeneratorPage() {
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<AIResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const [type, setType] =
-    useState<FashionType>("saree");
-
-  const [mode, setMode] = useState<
-    "simple" | "advanced"
-  >("advanced");
-
-  const [model, setModel] =
-    useState("FLUX Pro");
-
+  const [type, setType] = useState<FashionType>("saree");
+  const [mode, setMode] = useState<"simple" | "advanced">("advanced");
+  const [model, setModel] = useState("luxury");
   const [credits, setCredits] = useState(100);
 
-  // 🔥 GENERATE FUNCTION (UPGRADED)
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const supabase = getSupabase(); // ✅ added
+
   async function generateAI(prompt: string) {
-    if (!prompt || loading) return;
+    if (loading) return;
+
+    if (!prompt.trim()) {
+      setError("Please enter a prompt");
+      return;
+    }
+
+    if (credits <= 0) {
+      setError("No credits left");
+      return;
+    }
 
     try {
       setLoading(true);
       setError("");
       setResult(null);
 
-      const fashionPrompt =
-        buildFashionPrompt(type, prompt);
+      controllerRef.current?.abort();
+      controllerRef.current = new AbortController();
+
+      const fashionPrompt = buildFashionPrompt(type, prompt);
 
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: {
-          "Content-Type":
-            "application/json",
+          "Content-Type": "application/json",
         },
+        signal: controllerRef.current.signal,
         body: JSON.stringify({
           prompt: fashionPrompt,
           style: model,
@@ -54,51 +66,74 @@ export default function GeneratorPage() {
 
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
-        throw new Error(
-          data.error || "Generation failed"
-        );
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Server error");
       }
 
-      setResult(data.result);
+      const safeResult: AIResult = {
+        image: data.result?.image || "",
+        text: data.result?.text || "",
+      };
 
-      // 🎯 reduce credits
-      setCredits((prev) => prev - 1);
+      setResult(safeResult);
 
-    } catch (error: any) {
-      console.error(error);
-      setError(
-        error.message ||
-          "Something went wrong"
-      );
+      // 🔥 AUTO SAVE WITH USER ID
+      if (safeResult.image) {
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (user) {
+            await fetch("/api/save-image", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                image: safeResult.image,
+                prompt: fashionPrompt,
+                category: type,
+                user_id: user.id, // ✅ FIXED
+              }),
+            });
+          }
+        } catch (err) {
+          console.error("Save failed", err);
+        }
+      }
+
+      setCredits((prev) => Math.max(prev - 1, 0));
+
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
+      setError(err.message || "Generation failed");
     } finally {
       setLoading(false);
     }
   }
 
-  // 🔽 DOWNLOAD IMAGE
   function downloadImage() {
     if (!result?.image) return;
 
-    const link = document.createElement("a");
-    link.href = result.image;
-    link.download = "ajupy-design.png";
-    link.click();
+    try {
+      const link = document.createElement("a");
+      link.href = result.image;
+      link.download = `ajupy-${Date.now()}.png`;
+      link.click();
+    } catch {
+      setError("Download failed");
+    }
   }
 
   return (
     <div className="min-h-screen bg-black text-white p-8">
 
-      {/* HEADER */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-bold">
-            🚀 AJUPY AI Studio
-          </h1>
-
+          <h1 className="text-4xl font-bold">🚀 AJUPY AI Studio</h1>
           <p className="text-zinc-400 mt-1">
-            Generate textile, saree,
-            embroidery & fashion designs.
+            Generate textile, saree & fashion designs
           </p>
         </div>
 
@@ -107,93 +142,55 @@ export default function GeneratorPage() {
         </div>
       </div>
 
-      {/* MODEL SELECTOR */}
-      <div className="mb-6">
-        <label className="block mb-2 font-medium">
-          AI Model
-        </label>
+      <select
+        value={model}
+        onChange={(e) => setModel(e.target.value)}
+        className="bg-zinc-900 border border-zinc-700 rounded-xl p-3 mb-6"
+      >
+        <option value="luxury">Luxury</option>
+        <option value="bridal">Bridal</option>
+        <option value="minimal">Minimal</option>
+        <option value="royal">Royal</option>
+      </select>
 
-        <select
-          value={model}
-          onChange={(e) =>
-            setModel(e.target.value)
-          }
-          className="bg-zinc-900 border border-zinc-700 rounded-xl p-3"
-        >
-          <option>FLUX Pro</option>
-          <option>SDXL</option>
-          <option>Bridal AI</option>
-          <option>Luxury AI</option>
-          <option>Minimal AI</option>
-        </select>
-      </div>
+      <FashionSelector onSelect={setType} />
 
-      {/* CATEGORY */}
-      <FashionSelector
-        onSelect={setType}
-      />
-
-      {/* MODE */}
       <div className="flex gap-3 my-6">
-        <button
-          onClick={() =>
-            setMode("simple")
-          }
-          className={`px-5 py-2 rounded-xl ${
-            mode === "simple"
-              ? "bg-white text-black"
-              : "bg-zinc-800"
-          }`}
-        >
-          Simple
-        </button>
-
-        <button
-          onClick={() =>
-            setMode("advanced")
-          }
-          className={`px-5 py-2 rounded-xl ${
-            mode === "advanced"
-              ? "bg-white text-black"
-              : "bg-zinc-800"
-          }`}
-        >
-          Advanced
-        </button>
+        {["simple", "advanced"].map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m as any)}
+            className={`px-5 py-2 rounded-xl ${
+              mode === m ? "bg-white text-black" : "bg-zinc-800"
+            }`}
+          >
+            {m}
+          </button>
+        ))}
       </div>
 
-      {/* INPUT */}
       <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
         {mode === "simple" ? (
-          <PromptBox
-            onGenerate={generateAI}
-          />
+          <PromptBox onGenerate={generateAI} />
         ) : (
-          <AdvancedForm
-            onGenerate={generateAI}
-          />
+          <AdvancedForm onGenerate={generateAI} />
         )}
       </div>
 
-      {/* LOADING */}
       {loading && (
-        <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse">
-          ✨ Generating premium design...
+        <div className="mt-6 bg-zinc-900 p-4 rounded-xl animate-pulse">
+          ✨ Generating your design...
         </div>
       )}
 
-      {/* ERROR */}
       {error && (
         <div className="mt-6 bg-red-500/10 border border-red-500 rounded-xl p-4 text-red-400">
           {error}
         </div>
       )}
 
-      {/* RESULT */}
       {result && (
         <div className="mt-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-
-          {/* IMAGE */}
           {result.image && (
             <img
               src={result.image}
@@ -201,25 +198,20 @@ export default function GeneratorPage() {
             />
           )}
 
-          {/* TEXT */}
-          <pre className="whitespace-pre-wrap text-sm text-zinc-300">
-            {result.text}
-          </pre>
+          {result.text && (
+            <pre className="text-sm text-zinc-300 whitespace-pre-wrap">
+              {result.text}
+            </pre>
+          )}
 
-          {/* ACTIONS */}
-          <div className="mt-4 flex gap-3">
-            <button
-              onClick={downloadImage}
-              className="bg-white text-black px-4 py-2 rounded-xl"
-            >
-              Download
-            </button>
-          </div>
+          <button
+            onClick={downloadImage}
+            className="mt-4 bg-white text-black px-4 py-2 rounded-xl"
+          >
+            Download
+          </button>
         </div>
       )}
-
-      {/* OLD GRID (optional) */}
-      {/* <ResultGrid result={result} /> */}
     </div>
   );
 }
