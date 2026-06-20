@@ -1,67 +1,88 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+"use client";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { useState } from "react";
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const { image, prompt, category, user_id } = body;
+export default function GeneratorPage() {
+  const [image, setImage] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [category, setCategory] = useState("saree");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-    // 🔥 VALIDATION (strict)
-    if (!image || !prompt || !user_id) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "image, prompt, user_id required",
+  const handleSubmit = async () => {
+    try {
+      setLoading(true);
+      setMessage("");
+
+      // ⚠️ IMPORTANT: user_id tumhe auth se lena chahiye
+      const user_id = "demo-user-id"; // 👉 replace with real user id
+
+      const res = await fetch("/api/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        { status: 400 }
-      );
-    }
-
-    // 🔥 INSERT (safe + controlled)
-    const { data, error } = await supabase
-      .from("collections")
-      .insert([
-        {
+        body: JSON.stringify({
           image,
           prompt,
-          category: category || "saree",
+          category,
           user_id,
-          created_at: new Date().toISOString(), // optional safety
-        },
-      ])
-      .select();
+        }),
+      });
 
-    if (error) {
-      console.error("SUPABASE ERROR:", error);
+      const data = await res.json();
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: error.message,
-        },
-        { status: 500 }
-      );
+      if (!res.ok) {
+        throw new Error(data.error || "Something went wrong");
+      }
+
+      setMessage("✅ Saved successfully!");
+      setImage("");
+      setPrompt("");
+    } catch (err: any) {
+      setMessage("❌ " + err.message);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return NextResponse.json({
-      success: true,
-      data,
-    });
+  return (
+    <div style={{ padding: "20px" }}>
+      <h1>AI Generator</h1>
 
-  } catch (err: any) {
-    console.error("SAVE API ERROR:", err);
+      <input
+        type="text"
+        placeholder="Image URL"
+        value={image}
+        onChange={(e) => setImage(e.target.value)}
+        style={{ display: "block", marginBottom: "10px", width: "300px" }}
+      />
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: err.message || "Failed to save",
-      },
-      { status: 500 }
-    );
-  }
+      <input
+        type="text"
+        placeholder="Prompt"
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        style={{ display: "block", marginBottom: "10px", width: "300px" }}
+      />
+
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        style={{ marginBottom: "10px" }}
+      >
+        <option value="saree">Saree</option>
+        <option value="kurti">Kurti</option>
+        <option value="lehenga">Lehenga</option>
+      </select>
+
+      <br />
+
+      <button onClick={handleSubmit} disabled={loading}>
+        {loading ? "Saving..." : "Save"}
+      </button>
+
+      {message && <p>{message}</p>}
+    </div>
+  );
 }
