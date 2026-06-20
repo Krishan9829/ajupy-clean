@@ -8,32 +8,42 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { image, prompt, category, user_id } = await req.json();
+    const body = await req.json();
+    const { image, prompt, category, user_id } = body;
 
-    // 🔥 VALIDATION
+    // 🔥 VALIDATION (strict)
     if (!image || !prompt || !user_id) {
       return NextResponse.json(
-        { success: false, error: "Missing data" },
+        {
+          success: false,
+          error: "image, prompt, user_id required",
+        },
         { status: 400 }
       );
     }
 
-    // 🔥 INSERT WITH USER
+    // 🔥 INSERT (safe + controlled)
     const { data, error } = await supabase
       .from("collections")
       .insert([
         {
           image,
           prompt,
-          category,
-          user_id, // ✅ IMPORTANT
+          category: category || "saree",
+          user_id,
+          created_at: new Date().toISOString(), // optional safety
         },
       ])
       .select();
 
     if (error) {
+      console.error("SUPABASE ERROR:", error);
+
       return NextResponse.json(
-        { success: false, error: error.message },
+        {
+          success: false,
+          error: error.message,
+        },
         { status: 500 }
       );
     }
@@ -44,6 +54,8 @@ export async function POST(req: Request) {
     });
 
   } catch (err: any) {
+    console.error("SAVE API ERROR:", err);
+
     return NextResponse.json(
       {
         success: false,
