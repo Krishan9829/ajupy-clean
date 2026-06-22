@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSupabase } from "../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 import ImageCard from "../../components/ai/image-card";
 
 type Collection = {
@@ -18,57 +18,47 @@ export default function CollectionsPage() {
   const [search, setSearch] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // ✅ keep your approach
-  const supabase = getSupabase();
-
   useEffect(() => {
     fetchCollections();
   }, []);
 
   const fetchCollections = async () => {
     try {
-      if (!supabase) {
-        console.error("❌ Supabase not initialized");
-        setErrorMsg("Server issue. Try again later.");
-        setCollections([]);
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
+      setErrorMsg("");
 
-      // 🔥 NEW: get current user
+      // 🔥 GET USER
       const { data: userData, error: userError } =
         await supabase.auth.getUser();
 
       if (userError || !userData?.user) {
         setErrorMsg("User not authenticated");
         setCollections([]);
-        setLoading(false);
         return;
       }
 
       const userId = userData.user.id;
 
-      // 🔥 FIX: fetch only user's data
+      // 🔥 FETCH USER DATA
       const { data, error } = await supabase
-        .from("collections")
+        .from("generations")
         .select("*")
         .eq("user_id", userId)
         .order("id", { ascending: false });
 
       if (error) {
-        console.error(error);
         setErrorMsg("Failed to load collections");
         setCollections([]);
-      } else {
-        setCollections((data || []) as Collection[]);
+        return;
       }
+
+      setCollections((data || []) as Collection[]);
     } catch (err) {
-      console.error(err);
       setErrorMsg("Something went wrong");
       setCollections([]);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   // 🔍 SEARCH FILTER
@@ -76,7 +66,7 @@ export default function CollectionsPage() {
     item.prompt?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ⏳ LOADING UI (UPGRADED)
+  // ⏳ LOADING
   if (loading) {
     return (
       <div className="p-6">
@@ -84,8 +74,8 @@ export default function CollectionsPage() {
           {[...Array(6)].map((_, i) => (
             <div
               key={i}
-              className="h-40 bg-gray-200 animate-pulse rounded"
-            ></div>
+              className="h-40 bg-zinc-800 animate-pulse rounded"
+            />
           ))}
         </div>
       </div>
@@ -94,8 +84,9 @@ export default function CollectionsPage() {
 
   return (
     <div className="p-6">
+
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
         <h1 className="text-2xl font-bold">
           🗂️ Your Collections
         </h1>
@@ -105,38 +96,38 @@ export default function CollectionsPage() {
           placeholder="Search designs..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="bg-zinc-900 border border-zinc-700 px-3 py-2 rounded-lg text-sm outline-none focus:border-white text-white"
         />
       </div>
 
-      {/* ERROR UI */}
+      {/* ERROR */}
       {errorMsg && (
-        <div className="mb-4 text-red-500 text-sm">
+        <div className="mb-4 text-red-400 text-sm">
           {errorMsg}
         </div>
       )}
 
       {/* STATS */}
-      <p className="text-sm text-gray-500 mb-4">
+      <p className="text-sm text-zinc-500 mb-4">
         Total Designs: {filtered.length}
       </p>
 
-      {/* EMPTY STATE */}
+      {/* EMPTY */}
       {filtered.length === 0 ? (
-        <div className="text-center mt-10 text-gray-500">
+        <div className="text-center mt-10 text-zinc-500">
           <p>No designs found.</p>
           <p className="text-sm">
             Try generating some designs first 👗
           </p>
         </div>
       ) : (
-        /* GRID */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
           {filtered.map((item) => (
             <ImageCard key={item.id} img={item} />
           ))}
         </div>
       )}
+
     </div>
   );
 }

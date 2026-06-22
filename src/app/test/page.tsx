@@ -1,21 +1,19 @@
 "use client";
 
-import { getSupabase } from "../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useEffect } from "react";
 
 export default function Test() {
   useEffect(() => {
     async function test() {
       try {
-        const supabase = getSupabase();
-
         const { data, error } = await supabase
           .from("designs")
           .select("*")
           .limit(10);
 
         if (error) {
-          console.error("Supabase Error:", error.message);
+          console.error("❌ Supabase Error:", error.message);
           return;
         }
 

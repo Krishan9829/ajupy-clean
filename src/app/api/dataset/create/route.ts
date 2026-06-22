@@ -1,6 +1,6 @@
-import { getSupabaseAdmin } from "../../../../lib/supabaseAdmin";
-
 export const dynamic = "force-dynamic";
+
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   try {
@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     const user_id = body?.user_id;
     const name = body?.name;
 
-    // validation
+    // 🔥 VALIDATION
     if (!user_id || !name) {
       return Response.json(
         { error: "user_id and name are required" },
@@ -17,9 +17,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ safe init (fixes build + SSR issues)
-    const supabaseAdmin = getSupabaseAdmin();
-
+    // 🔥 DIRECT USE (NO FUNCTION)
     const { data, error } = await supabaseAdmin
       .from("datasets")
       .insert([

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
 
     // 🔥 INSERT (safe + controlled)
     const { data, error } = await supabase
-      .from("collections")
+      .from("generations")
       .insert([
         {
           image,

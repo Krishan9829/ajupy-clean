@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -18,8 +18,6 @@ export default function LoginForm() {
     e.preventDefault();
 
     if (loading) return;
-
-    const supabase = getSupabase(); // ✅ moved inside handler (BEST PRACTICE)
 
     setErrorMsg("");
 
@@ -41,7 +39,6 @@ export default function LoginForm() {
         return;
       }
 
-      // ✅ prevent reload loop issues
       router.replace("/dashboard");
       router.refresh();
 

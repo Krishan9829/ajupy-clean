@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { User } from "@supabase/supabase-js";
 
 const modules = [
@@ -22,16 +22,15 @@ export default function DashboardPage() {
 
   const router = useRouter();
 
+  // 🔥 INIT USER
   useEffect(() => {
-    const supabase = getSupabase();
-
-    const initUser = async () => {
+    const init = async () => {
       const { data } = await supabase.auth.getUser();
       setUser(data.user ?? null);
       setLoading(false);
     };
 
-    initUser();
+    init();
 
     const {
       data: { subscription },
@@ -42,15 +41,20 @@ export default function DashboardPage() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // 🔥 REDIRECT IF NOT LOGGED IN
   useEffect(() => {
-    if (loading) return;
-
-    if (!user) {
+    if (!loading && !user) {
       router.replace("/auth/login");
     }
   }, [user, loading, router]);
 
-  // ⏳ LOADING SCREEN
+  // 🔥 LOGOUT
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/auth/login");
+  };
+
+  // ⏳ LOADING
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black text-white">
@@ -62,22 +66,15 @@ export default function DashboardPage() {
   // 🔄 REDIRECT UI
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center text-white">
         Redirecting...
       </div>
     );
   }
 
-  // 🔥 LOGOUT
-  const handleLogout = async () => {
-    const supabase = getSupabase();
-    await supabase.auth.signOut();
-    router.replace("/auth/login");
-  };
-
   return (
     <div className="min-h-screen bg-black text-white p-8">
-
+      
       {/* HEADER */}
       <div className="flex justify-between items-center flex-wrap gap-4">
         

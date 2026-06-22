@@ -1,28 +1,13 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
 export const dynamic = "force-dynamic";
 
-const getSupabase = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
-    throw new Error("Missing Supabase environment variables");
-  }
-
-  return createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-};
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   try {
-    const { title, content, image } = await req.json();
+    const { title, content, image, user_id } = await req.json();
 
+    // 🔥 VALIDATION
     if (!title || !content) {
       return NextResponse.json(
         { error: "Title & content required" },
@@ -30,29 +15,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = getSupabase();
-
-    const { data, error } = await supabase
-      .from("collections")
+    // 🔥 INSERT
+    const { data, error } = await supabaseAdmin
+      .from("generations")
       .insert([
         {
           title,
           content,
           image: image || null,
+          user_id: user_id || "guest",
         },
       ])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       collection: data,
     });
   } catch (err: any) {
-    console.error(err);
-
     return NextResponse.json(
       {
         error: err.message || "Server error",

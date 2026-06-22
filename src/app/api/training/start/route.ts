@@ -1,11 +1,18 @@
-import { getSupabaseAdmin } from "../../../../lib/supabaseAdmin";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   try {
     const { dataset_id, model_name } = await req.json();
 
-    const supabaseAdmin = getSupabaseAdmin();
+    // 🔥 VALIDATION
+    if (!dataset_id || !model_name) {
+      return Response.json(
+        { error: "dataset_id and model_name required" },
+        { status: 400 }
+      );
+    }
 
+    // 🔥 INSERT JOB
     const { data, error } = await supabaseAdmin
       .from("training_jobs")
       .insert([
@@ -20,10 +27,13 @@ export async function POST(req: Request) {
 
     if (error) {
       console.error("SUPABASE ERROR:", error);
-      return Response.json({ error: error.message }, { status: 500 });
+      return Response.json(
+        { error: error.message },
+        { status: 500 }
+      );
     }
 
-    return Response.json({ job: data });
+    return Response.json({ success: true, job: data });
   } catch (err: any) {
     console.error("SERVER ERROR:", err);
     return Response.json(

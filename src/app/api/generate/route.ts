@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 // 🔥 CONFIG
 const USE_DEMO = process.env.USE_DEMO === "true";
@@ -10,10 +11,7 @@ const USE_DEMO = process.env.USE_DEMO === "true";
 const rateMap = new Map<string, number>();
 
 // 🔥 TIMEOUT
-const withTimeout = async <T>(
-  promise: Promise<T>,
-  ms = 20000
-): Promise<T> => {
+const withTimeout = async <T>(promise: Promise<T>, ms = 20000): Promise<T> => {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
@@ -22,17 +20,9 @@ const withTimeout = async <T>(
   ]);
 };
 
-// ✅ GET (for testing)
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    message: "API is working. Use POST",
-  });
-}
-
 export async function POST(req: Request) {
   try {
-    // 🔥 IP RATE LIMIT
+    // 🔥 IP
     const ip =
       req.headers.get("x-forwarded-for") ||
       req.headers.get("x-real-ip") ||
@@ -41,7 +31,7 @@ export async function POST(req: Request) {
     const now = Date.now();
     const last = rateMap.get(ip) || 0;
 
-    if (now - last < 1000) {
+    if (now - last < 1500) {
       return NextResponse.json(
         { success: false, error: "Too many requests" },
         { status: 429 }
@@ -51,25 +41,25 @@ export async function POST(req: Request) {
     rateMap.set(ip, now);
 
     // 🔥 BODY
-    const body = await req.json();
-    let { prompt, style } = body;
+    const { prompt: rawPrompt, style: rawStyle, user_id } =
+      await req.json();
 
-    if (!prompt || typeof prompt !== "string") {
+    if (!rawPrompt || typeof rawPrompt !== "string") {
       return NextResponse.json(
         { success: false, error: "Invalid prompt" },
         { status: 400 }
       );
     }
 
-    prompt = prompt.trim().slice(0, 200);
+    const prompt = rawPrompt.trim().slice(0, 200);
 
     const allowedStyles = ["bridal", "luxury", "minimal", "royal"];
-    style =
-      typeof style === "string" && allowedStyles.includes(style)
-        ? style
+    const style =
+      typeof rawStyle === "string" && allowedStyles.includes(rawStyle)
+        ? rawStyle
         : "luxury";
 
-    // 🔥 DEMO MODE
+    // 🔥 DEMO
     if (USE_DEMO) {
       return NextResponse.json({
         success: true,
@@ -82,47 +72,51 @@ export async function POST(req: Request) {
       });
     }
 
-    // 🔥 TEXT AI (OPTIONAL — works only if billing ok)
+    // 🔥 TEXT AI
     let text = `Design for: ${prompt}`;
 
-    try {
-      if (process.env.OPENAI_API_KEY) {
+    if (process.env.OPENAI_API_KEY) {
+      try {
         const openai = new OpenAI({
           apiKey: process.env.OPENAI_API_KEY,
         });
 
-        const textRes = await withTimeout(
+        const res = await withTimeout(
           openai.responses.create({
             model: "gpt-4o-mini",
-            input: `Create ${style} saree design for: ${prompt}`,
+            input: `Create ${style} saree design description for: ${prompt}`,
           })
         );
 
-        text =
-          (textRes as any)?.output_text ||
-          text;
+        text = (res as any)?.output_text || text;
+      } catch {
+        console.log("AI text fallback used");
       }
-    } catch (e) {
-      console.log("Text AI failed, using fallback");
     }
 
-    // 🔥 FREE IMAGE (NO API KEY 💀🔥)
+    // 🔥 IMAGE
     const image = `https://image.pollinations.ai/prompt/${encodeURIComponent(
-      prompt +
-        ", indian saree, " +
-        style +
-        ", ultra detailed, 4k, fashion design, textile pattern"
+      `${prompt}, indian saree design, ${style}, ultra detailed, 4k, textile pattern`
     )}`;
 
+    // 🔥 SAVE (NO FUNCTION WRAPPER NOW)
+    await supabaseAdmin.from("generations").insert([
+      {
+        user_id: user_id || "guest",
+        prompt,
+        style,
+        image_url: image,
+      },
+    ]);
+
+    // 🔥 RESPONSE
     return NextResponse.json({
       success: true,
-      mode: "free",
       result: {
         text,
         image,
       },
     });
-
   } catch (err: any) {
     return NextResponse.json(
       {

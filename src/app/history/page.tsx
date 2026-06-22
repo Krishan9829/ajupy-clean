@@ -1,27 +1,25 @@
-import { getSupabaseAdmin } from "../../lib/supabaseAdmin";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import Sidebar from "../../components/layout/sidebar";
+
+export const dynamic = "force-dynamic";
 
 export default async function HistoryPage() {
   let data: any[] = [];
   let error: string | null = null;
 
   try {
-    const supabaseAdmin = getSupabaseAdmin();
-
-    const res = await supabaseAdmin
-      .from("prompt_history")
+    const { data: resData, error: resError } = await supabaseAdmin
+      .from("generations")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(20);
 
-    if (res.error) {
-      console.error("SUPABASE ERROR:", res.error);
-      throw new Error(res.error.message);
+    if (resError) {
+      throw new Error(resError.message);
     }
 
-    data = res.data || [];
+    data = resData || [];
   } catch (err: any) {
-    console.error("FULL ERROR:", err);
     error = err?.message || "Failed to load history";
   }
 
@@ -46,7 +44,7 @@ export default async function HistoryPage() {
           </div>
         )}
 
-        {/* EMPTY STATE */}
+        {/* EMPTY */}
         {!error && data.length === 0 && (
           <div className="text-zinc-500 text-center mt-20">
             🚀 No history yet. Generate your first design!
@@ -55,7 +53,6 @@ export default async function HistoryPage() {
 
         {/* GRID */}
         <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-
           {data.map((item) => (
             <div
               key={item.id}
@@ -67,29 +64,32 @@ export default async function HistoryPage() {
                 <img
                   src={
                     item.image_url ||
-                    "https://via.placeholder.com/400?text=No+Image"
+                    "https://images.unsplash.com/photo-1520975916090-3105956dac38"
                   }
                   className="w-full h-56 object-cover group-hover:scale-105 transition"
+                  alt="generated"
                 />
               </div>
 
               {/* PROMPT */}
               <p className="text-xs text-zinc-500 mb-1">PROMPT</p>
               <p className="text-sm text-zinc-300 mb-4 line-clamp-3">
-                {item.prompt}
+                {item.prompt || "No prompt available"}
               </p>
 
               {/* RESPONSE */}
               <p className="text-xs text-zinc-500 mb-1">AI RESPONSE</p>
               <p className="text-sm text-zinc-400 line-clamp-4">
-                {item.response}
+                {item.response || "AI response not saved"}
               </p>
 
               {/* FOOTER */}
               <div className="flex justify-between items-center mt-4 text-xs text-zinc-500">
 
                 <span>
-                  {new Date(item.created_at).toLocaleDateString()}
+                  {item.created_at
+                    ? new Date(item.created_at).toLocaleDateString()
+                    : "Unknown date"}
                 </span>
 
                 {item.image_url && (
@@ -101,11 +101,11 @@ export default async function HistoryPage() {
                     ⬇ Download
                   </a>
                 )}
+
               </div>
 
             </div>
           ))}
-
         </div>
 
       </main>

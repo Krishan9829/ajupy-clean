@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import LoginForm from "../../components/auth/login-form";   // ✅ alias fix
-import SignupForm from "../../components/auth/signup-form"; // ✅ alias fix
-import { getSupabase } from "../../lib/supabase";
+import LoginForm from "../../components/auth/login-form";
+import SignupForm from "../../components/auth/signup-form";
+import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function AuthPage() {
@@ -12,15 +12,13 @@ export default function AuthPage() {
 
   const router = useRouter();
 
-  // 🔥 AUTO REDIRECT IF ALREADY LOGGED IN
+  // 🔥 CHECK SESSION
   useEffect(() => {
-    const supabase = getSupabase();
-
     const checkUser = async () => {
       const { data } = await supabase.auth.getUser();
 
       if (data?.user) {
-        router.replace("/dashboard"); // 👈 already logged in → dashboard
+        router.replace("/dashboard");
       } else {
         setChecking(false);
       }
@@ -29,7 +27,7 @@ export default function AuthPage() {
     checkUser();
   }, [router]);
 
-  // ⏳ LOADING SCREEN
+  // ⏳ LOADING
   if (checking) {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center text-white">
@@ -76,7 +74,7 @@ export default function AuthPage() {
           </button>
         </div>
 
-        {/* FORM SWITCH */}
+        {/* FORMS */}
         {mode === "login" ? <LoginForm /> : <SignupForm />}
 
       </div>

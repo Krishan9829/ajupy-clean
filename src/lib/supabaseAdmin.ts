@@ -1,17 +1,8 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
-// 🔥 Validate ENV
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !serviceRoleKey) {
-  throw new Error("❌ Missing Supabase Admin environment variables");
-}
-
-// 🔥 Single stable admin instance
-const supabaseAdmin: SupabaseClient = createClient(
-  supabaseUrl,
-  serviceRoleKey,
+export const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
     auth: {
       autoRefreshToken: false,
@@ -19,6 +10,3 @@ const supabaseAdmin: SupabaseClient = createClient(
     },
   }
 );
-
-// ✅ same function name (no change)
-export const getSupabaseAdmin = () => supabaseAdmin;

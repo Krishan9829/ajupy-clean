@@ -3,86 +3,183 @@
 import { useState } from "react";
 
 export default function GeneratorPage() {
-  const [image, setImage] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [category, setCategory] = useState("saree");
+  const [style, setStyle] = useState("luxury");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [image, setImage] = useState("");
+  const [error, setError] = useState("");
 
-  const handleSubmit = async () => {
+  const generate = async () => {
+    if (!prompt.trim()) {
+      setError("Prompt is required");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setImage("");
+
     try {
-      setLoading(true);
-      setMessage("");
+      // 🔥 USER ID AUTO GENERATE
+      let user_id = localStorage.getItem("user_id");
+      if (!user_id) {
+        user_id = crypto.randomUUID();
+        localStorage.setItem("user_id", user_id);
+      }
 
-      // ⚠️ IMPORTANT: user_id tumhe auth se lena chahiye
-      const user_id = "demo-user-id"; // 👉 replace with real user id
-
-      const res = await fetch("/api/save", {
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          image,
           prompt,
-          category,
+          style,
           user_id,
         }),
       });
 
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Generation failed");
       }
 
-      setMessage("✅ Saved successfully!");
-      setImage("");
-      setPrompt("");
+      setImage(data.result.image);
     } catch (err: any) {
-      setMessage("❌ " + err.message);
+      setError(err.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>AI Generator</h1>
+    <div style={styles.container}>
+      <h1 style={styles.title}>🔥 AI Saree Generator</h1>
 
-      <input
-        type="text"
-        placeholder="Image URL"
-        value={image}
-        onChange={(e) => setImage(e.target.value)}
-        style={{ display: "block", marginBottom: "10px", width: "300px" }}
-      />
-
-      <input
-        type="text"
-        placeholder="Prompt"
+      {/* INPUT */}
+      <textarea
+        placeholder="Describe your design... (e.g. red bridal saree with golden embroidery)"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
-        style={{ display: "block", marginBottom: "10px", width: "300px" }}
+        style={styles.input}
       />
 
+      {/* STYLE */}
       <select
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        style={{ marginBottom: "10px" }}
+        value={style}
+        onChange={(e) => setStyle(e.target.value)}
+        style={styles.select}
       >
-        <option value="saree">Saree</option>
-        <option value="kurti">Kurti</option>
-        <option value="lehenga">Lehenga</option>
+        <option value="luxury">Luxury</option>
+        <option value="bridal">Bridal</option>
+        <option value="minimal">Minimal</option>
+        <option value="royal">Royal</option>
       </select>
 
-      <br />
-
-      <button onClick={handleSubmit} disabled={loading}>
-        {loading ? "Saving..." : "Save"}
+      {/* BUTTON */}
+      <button
+        onClick={generate}
+        style={{
+          ...styles.button,
+          opacity: loading ? 0.6 : 1,
+          cursor: loading ? "not-allowed" : "pointer",
+        }}
+        disabled={loading}
+      >
+        {loading ? "Generating..." : "Generate Design"}
       </button>
 
-      {message && <p>{message}</p>}
+      {/* LOADING */}
+      {loading && <p style={styles.loading}>⏳ Generating AI design...</p>}
+
+      {/* ERROR */}
+      {error && <p style={styles.error}>❌ {error}</p>}
+
+      {/* RESULT */}
+      {image && (
+        <div style={styles.resultBox}>
+          <img src={image} style={styles.image} />
+
+          <div style={styles.actions}>
+            <a href={image} download style={styles.download}>
+              ⬇ Download
+            </a>
+
+            <button
+              onClick={() => navigator.clipboard.writeText(image)}
+              style={styles.copy}
+            >
+              📋 Copy Link
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const styles: any = {
+  container: {
+    maxWidth: 600,
+    margin: "40px auto",
+    padding: 20,
+    fontFamily: "Arial",
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  input: {
+    width: "100%",
+    height: 100,
+    padding: 10,
+    marginBottom: 10,
+  },
+  select: {
+    width: "100%",
+    padding: 10,
+    marginBottom: 10,
+  },
+  button: {
+    width: "100%",
+    padding: 12,
+    background: "black",
+    color: "white",
+    border: "none",
+  },
+  loading: {
+    marginTop: 10,
+  },
+  error: {
+    color: "red",
+    marginTop: 10,
+  },
+  resultBox: {
+    marginTop: 20,
+    textAlign: "center",
+  },
+  image: {
+    width: "100%",
+    borderRadius: 10,
+  },
+  actions: {
+    display: "flex",
+    gap: 10,
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  download: {
+    padding: 10,
+    background: "green",
+    color: "white",
+    textDecoration: "none",
+  },
+  copy: {
+    padding: 10,
+    background: "blue",
+    color: "white",
+    border: "none",
+    cursor: "pointer",
+  },
+};
