@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import ImageCard from "../../components/ai/image-card";
+import { useRouter } from "next/navigation";
 
 type Collection = {
   id: number;
-  image: string;
+  image_url: string;
   prompt: string;
   user_id?: string;
   created_at?: string;
@@ -18,6 +19,8 @@ export default function CollectionsPage() {
   const [search, setSearch] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
+  const router = useRouter();
+
   useEffect(() => {
     fetchCollections();
   }, []);
@@ -27,33 +30,35 @@ export default function CollectionsPage() {
       setLoading(true);
       setErrorMsg("");
 
-      // 🔥 GET USER
-      const { data: userData, error: userError } =
-        await supabase.auth.getUser();
+      // ✅ FIXED AUTH (NO NETWORK FAIL)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (userError || !userData?.user) {
-        setErrorMsg("User not authenticated");
-        setCollections([]);
+      if (!session) {
+        setErrorMsg("Please login first");
+        router.push("/login"); // 🔥 redirect
         return;
       }
 
-      const userId = userData.user.id;
+      const userId = session.user.id;
 
       // 🔥 FETCH USER DATA
       const { data, error } = await supabase
         .from("generations")
         .select("*")
         .eq("user_id", userId)
-        .order("id", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) {
-        setErrorMsg("Failed to load collections");
+        setErrorMsg(error.message || "Failed to load collections");
         setCollections([]);
         return;
       }
 
-      setCollections((data || []) as Collection[]);
+      setCollections(data || []);
     } catch (err) {
+      console.error(err);
       setErrorMsg("Something went wrong");
       setCollections([]);
     } finally {
@@ -66,7 +71,7 @@ export default function CollectionsPage() {
     item.prompt?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ⏳ LOADING
+  // ⏳ LOADING UI
   if (loading) {
     return (
       <div className="p-6">
@@ -74,7 +79,7 @@ export default function CollectionsPage() {
           {[...Array(6)].map((_, i) => (
             <div
               key={i}
-              className="h-40 bg-zinc-800 animate-pulse rounded"
+              className="h-40 bg-zinc-800 animate-pulse rounded-xl"
             />
           ))}
         </div>
@@ -87,7 +92,7 @@ export default function CollectionsPage() {
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-2xl font-bold text-white">
           🗂️ Your Collections
         </h1>
 

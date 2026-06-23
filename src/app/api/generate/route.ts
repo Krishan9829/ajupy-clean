@@ -1,28 +1,13 @@
 export const dynamic = "force-dynamic";
 
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// 🔥 CONFIG
-const USE_DEMO = process.env.USE_DEMO === "true";
-
-// 🔥 RATE LIMIT
 const rateMap = new Map<string, number>();
-
-// 🔥 TIMEOUT
-const withTimeout = async <T>(promise: Promise<T>, ms = 20000): Promise<T> => {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("Timeout")), ms)
-    ),
-  ]);
-};
 
 export async function POST(req: Request) {
   try {
-    // 🔥 IP
+    // 🔥 RATE LIMIT
     const ip =
       req.headers.get("x-forwarded-for") ||
       req.headers.get("x-real-ip") ||
@@ -41,87 +26,62 @@ export async function POST(req: Request) {
     rateMap.set(ip, now);
 
     // 🔥 BODY
-    const { prompt: rawPrompt, style: rawStyle, user_id } =
-      await req.json();
+    const { prompt, style, user_id } = await req.json();
 
-    if (!rawPrompt || typeof rawPrompt !== "string") {
+    if (!prompt) {
       return NextResponse.json(
-        { success: false, error: "Invalid prompt" },
+        { success: false, error: "Prompt required" },
         { status: 400 }
       );
     }
 
-    const prompt = rawPrompt.trim().slice(0, 200);
+    const cleanPrompt = prompt.trim().slice(0, 200);
 
-    const allowedStyles = ["bridal", "luxury", "minimal", "royal"];
-    const style =
-      typeof rawStyle === "string" && allowedStyles.includes(rawStyle)
-        ? rawStyle
-        : "luxury";
+    const safeStyle = ["bridal", "luxury", "minimal", "royal"].includes(style)
+      ? style
+      : "luxury";
 
-    // 🔥 DEMO
-    if (USE_DEMO) {
-      return NextResponse.json({
-        success: true,
-        mode: "demo",
-        result: {
-          text: `Demo design for ${prompt}`,
-          image:
-            "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf",
-        },
-      });
-    }
+    // 🔥 OPTIMIZED PROMPT (LIGHT OUTPUT)
+    const imagePrompt = `
+${cleanPrompt},
+indian saree design,
+${safeStyle} style,
+clean details,
+fashion photography,
+sharp focus
+`;
 
-    // 🔥 TEXT AI
-    let text = `Design for: ${prompt}`;
+    const base = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?model=sana&enhance=true`;
 
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        const openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        });
+const seed = Date.now();
 
-        const res = await withTimeout(
-          openai.responses.create({
-            model: "gpt-4o-mini",
-            input: `Create ${style} saree design description for: ${prompt}`,
-          })
-        );
+const images = {
+  low: `${base}&width=768&height=768&seed=${seed}`,
+  medium: `${base}&width=1024&height=1024&seed=${seed}`,
+  high: `${base}&width=2048&height=2048&seed=${seed}`,
+  ultra: `${base}&width=2048&height=2048&seed=${seed}`, // stable premium
+};
 
-        text = (res as any)?.output_text || text;
-      } catch {
-        console.log("AI text fallback used");
-      }
-    }
+    // 🔥 SAVE
+    await supabaseAdmin.from("generations").insert({
+      user_id: user_id || "guest",
+      prompt: cleanPrompt,
+      style: safeStyle,
+      image_url: images.medium,
+    });
 
-    // 🔥 IMAGE
-    const image = `https://image.pollinations.ai/prompt/${encodeURIComponent(
-      `${prompt}, indian saree design, ${style}, ultra detailed, 4k, textile pattern`
-    )}`;
-
-    // 🔥 SAVE (NO FUNCTION WRAPPER NOW)
-    await supabaseAdmin.from("generations").insert([
-      {
-        user_id: user_id || "guest",
-        prompt,
-        style,
-        image_url: image,
-      },
-    ]);
-
-    // 🔥 RESPONSE
     return NextResponse.json({
       success: true,
       result: {
-        text,
-        image,
+        images,
       },
     });
+
   } catch (err: any) {
     return NextResponse.json(
       {
         success: false,
-        error: err.message || "Server error",
+        error: err.message,
       },
       { status: 500 }
     );

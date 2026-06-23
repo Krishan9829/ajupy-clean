@@ -6,27 +6,32 @@ export default function GeneratorPage() {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("luxury");
   const [loading, setLoading] = useState(false);
-  const [image, setImage] = useState("");
+  const [images, setImages] = useState<any>(null);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const getUserId = () => {
+    let id = localStorage.getItem("user_id");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("user_id", id);
+    }
+    return id;
+  };
 
   const generate = async () => {
     if (!prompt.trim()) {
-      setError("Prompt is required");
+      setError("Please enter prompt");
       return;
     }
 
+    if (loading) return;
+
     setLoading(true);
     setError("");
-    setImage("");
+    setImages(null);
 
     try {
-      // 🔥 USER ID AUTO GENERATE
-      let user_id = localStorage.getItem("user_id");
-      if (!user_id) {
-        user_id = crypto.randomUUID();
-        localStorage.setItem("user_id", user_id);
-      }
-
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: {
@@ -35,151 +40,260 @@ export default function GeneratorPage() {
         body: JSON.stringify({
           prompt,
           style,
-          user_id,
+          user_id: getUserId(),
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Generation failed");
+        throw new Error(data.error || "Failed to generate");
       }
 
-      setImage(data.result.image);
+      setImages(data.result.images);
+
     } catch (err: any) {
-      setError(err.message || "Something went wrong");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // 🔥 DOWNLOAD FUNCTION (PRO)
+  const downloadImage = async (url: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `saree-${Date.now()}.png`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      alert("Download failed");
+    }
+  };
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(images.high);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>🔥 AI Saree Generator</h1>
+    <div style={styles.page}>
 
-      {/* INPUT */}
-      <textarea
-        placeholder="Describe your design... (e.g. red bridal saree with golden embroidery)"
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        style={styles.input}
-      />
+      {/* HEADER */}
+      <div style={styles.header}>
+        <h1>✨ AI Saree Designer Studio</h1>
+        <p>Create premium AI fashion designs</p>
+      </div>
 
-      {/* STYLE */}
-      <select
-        value={style}
-        onChange={(e) => setStyle(e.target.value)}
-        style={styles.select}
-      >
-        <option value="luxury">Luxury</option>
-        <option value="bridal">Bridal</option>
-        <option value="minimal">Minimal</option>
-        <option value="royal">Royal</option>
-      </select>
+      {/* INPUT CARD */}
+      <div style={styles.card}>
+        <textarea
+          placeholder="Describe your saree design..."
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          style={styles.input}
+        />
 
-      {/* BUTTON */}
-      <button
-        onClick={generate}
-        style={{
-          ...styles.button,
-          opacity: loading ? 0.6 : 1,
-          cursor: loading ? "not-allowed" : "pointer",
-        }}
-        disabled={loading}
-      >
-        {loading ? "Generating..." : "Generate Design"}
-      </button>
+        <select
+          value={style}
+          onChange={(e) => setStyle(e.target.value)}
+          style={styles.select}
+        >
+          <option value="luxury">Luxury</option>
+          <option value="bridal">Bridal</option>
+          <option value="minimal">Minimal</option>
+          <option value="royal">Royal</option>
+        </select>
+
+        <button
+          onClick={generate}
+          disabled={loading}
+          style={{
+            ...styles.button,
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          {loading ? "Generating..." : "Generate Design ✨"}
+        </button>
+
+        {error && <p style={styles.error}>❌ {error}</p>}
+      </div>
 
       {/* LOADING */}
-      {loading && <p style={styles.loading}>⏳ Generating AI design...</p>}
-
-      {/* ERROR */}
-      {error && <p style={styles.error}>❌ {error}</p>}
+      {loading && (
+        <div style={styles.loader}>
+          <div style={styles.spinner}></div>
+          <p>Creating your design...</p>
+        </div>
+      )}
 
       {/* RESULT */}
-      {image && (
-        <div style={styles.resultBox}>
-          <img src={image} style={styles.image} />
+      {images && (
+        <div style={styles.result}>
+          <img src={images.high} style={styles.image} />
 
-          <div style={styles.actions}>
-            <a href={image} download style={styles.download}>
-              ⬇ Download
-            </a>
+          {/* DOWNLOAD OPTIONS */}
+          <div style={styles.grid}>
 
-            <button
-              onClick={() => navigator.clipboard.writeText(image)}
-              style={styles.copy}
-            >
-              📋 Copy Link
-            </button>
-          </div>
+  <button onClick={() => downloadImage(images.hd)} style={styles.btn}>
+  HD(748)
+</button>
+
+<button onClick={() => downloadImage(images["2k"])} style={styles.btn}>
+  2K(1024)
+</button>
+
+<button onClick={() => downloadImage(images["4k"])} style={styles.btn}>
+  4K(2048)
+</button>
+
+<button onClick={() => downloadImage(images.premium)} style={styles.btnPrimary}>
+  Premium(4096)
+</button> 
+
+</div>
+            
+          {/* COPY */}
+          <button onClick={copyLink} style={styles.copy}>
+            {copied ? "✔ Copied" : "📋 Copy Link"}
+          </button>
         </div>
       )}
     </div>
   );
 }
 
+/* 🎨 STYLES */
+
 const styles: any = {
-  container: {
-    maxWidth: 600,
-    margin: "40px auto",
+  page: {
+    minHeight: "100vh",
     padding: 20,
     fontFamily: "Arial",
+    color: "#fff",
+    background: "linear-gradient(135deg, #0f172a, #020617)",
   },
-  title: {
+
+  header: {
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 25,
   },
+
+  card: {
+    maxWidth: 650,
+    margin: "0 auto",
+    padding: 20,
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)",
+  },
+
   input: {
     width: "100%",
-    height: 100,
-    padding: 10,
+    height: 120,
+    padding: 12,
+    borderRadius: 10,
+    background: "#111",
+    color: "#fff",
     marginBottom: 10,
+    border: "1px solid #333",
   },
+
   select: {
     width: "100%",
-    padding: 10,
+    padding: 12,
+    borderRadius: 10,
+    background: "#111",
+    color: "#fff",
+    border: "1px solid #333",
     marginBottom: 10,
   },
+
   button: {
     width: "100%",
-    padding: 12,
-    background: "black",
-    color: "white",
+    padding: 14,
+    borderRadius: 10,
+    background: "linear-gradient(90deg,#6366f1,#8b5cf6)",
+    color: "#fff",
     border: "none",
+    fontWeight: "bold",
+    cursor: "pointer",
   },
-  loading: {
-    marginTop: 10,
-  },
+
   error: {
     color: "red",
     marginTop: 10,
   },
-  resultBox: {
+
+  loader: {
+    textAlign: "center",
     marginTop: 20,
+  },
+
+  spinner: {
+    width: 40,
+    height: 40,
+    border: "4px solid #333",
+    borderTop: "4px solid #fff",
+    borderRadius: "50%",
+    margin: "0 auto",
+    animation: "spin 1s linear infinite",
+  },
+
+  result: {
+    maxWidth: 650,
+    margin: "20px auto",
+    padding: 15,
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)",
     textAlign: "center",
   },
+
   image: {
     width: "100%",
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  actions: {
-    display: "flex",
+
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
     gap: 10,
-    justifyContent: "center",
-    marginTop: 10,
+    marginTop: 15,
   },
-  download: {
+
+  btn: {
     padding: 10,
-    background: "green",
-    color: "white",
-    textDecoration: "none",
-  },
-  copy: {
-    padding: 10,
-    background: "blue",
-    color: "white",
+    background: "#1f2937",
+    color: "#fff",
     border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+  },
+
+  btnPrimary: {
+    padding: 10,
+    background: "#000",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+  },
+
+  copy: {
+    marginTop: 10,
+    padding: 10,
+    background: "#3b82f6",
+    border: "none",
+    borderRadius: 8,
+    color: "#fff",
     cursor: "pointer",
   },
 };
